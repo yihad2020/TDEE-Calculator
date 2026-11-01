@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export function StageHeader({ index, eyebrow, title, sub }: { index: string; eyebrow: string; title: ReactNode; sub?: string }) {
   return (
@@ -18,6 +18,17 @@ export function NumField({
 }: {
   value: number; onChange: (v: number) => void; min: number; max: number; step?: number; label: string; suffix?: string; width?: string;
 }) {
+  // Keep the text being edited separate from the validated numeric profile value.
+  // Otherwise intermediate inputs like "" or "2" are immediately clamped and
+  // React replaces the user's typing with a boundary value.
+  const format = (v: number) => Number.isFinite(v) ? String(Math.round(v * 10) / 10) : "";
+  const [draft, setDraft] = useState(() => format(value));
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(format(value));
+  }, [value, editing]);
+
   return (
     <label className="inline-flex items-baseline gap-1 border-b border-input pb-1 focus-within:border-lime">
       <span className="sr-only">{label}</span>
@@ -27,14 +38,27 @@ export function NumField({
         min={min}
         max={max}
         step={step}
-        value={Number.isFinite(value) ? Math.round(value * 10) / 10 : ""}
+        value={draft}
+        onFocus={() => setEditing(true)}
         onChange={(e) => {
-          const v = parseFloat(e.target.value);
-          if (!Number.isNaN(v)) onChange(v);
+          const text = e.target.value;
+          setDraft(text);
+          if (text.trim() === "") return;
+          const parsed = Number(text);
+          // Only valid, complete numbers propagate while typing. Out-of-range
+          // drafts remain editable until the field loses focus.
+          if (Number.isFinite(parsed) && parsed >= min && parsed <= max) {
+            onChange(parsed);
+          }
         }}
-        onBlur={(e) => {
-          const v = parseFloat(e.target.value);
-          onChange(Number.isNaN(v) ? min : Math.min(max, Math.max(min, v)));
+        onBlur={() => {
+          setEditing(false);
+          const parsed = draft.trim() === "" ? NaN : Number(draft);
+          const next = Number.isFinite(parsed)
+            ? Math.min(max, Math.max(min, parsed))
+            : value;
+          onChange(next);
+          setDraft(format(next));
         }}
         className={`${width} bg-transparent font-mono text-sm tabular text-foreground outline-none`}
       />
